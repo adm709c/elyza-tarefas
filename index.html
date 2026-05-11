@@ -4,7 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>✨ Tarefas · Elyza</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -55,11 +54,37 @@
 <script type="text/babel">
 const { useState, useCallback, useEffect, useMemo, useRef } = React;
 
-// ── Supabase ──────────────────────────────────────────────────────────────────
+// ── Supabase REST ─────────────────────────────────────────────────────────────
 
-const SUPABASE_URL = "https://qqzspssukazsftxopqfg.supabase.co";
-const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxenNwc3N1a2F6c2Z0eG9wcWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NTM4MTUsImV4cCI6MjA5NDAyOTgxNX0.aVLhIGi5BETdlA2bDD5HQZkfzltm5vDRLhMf83jQGQQ";
-const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const SB_URL = "https://qqzspssukazsftxopqfg.supabase.co/rest/v1";
+const SB_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxenNwc3N1a2F6c2Z0eG9wcWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NTM4MTUsImV4cCI6MjA5NDAyOTgxNX0.aVLhIGi5BETdlA2bDD5HQZkfzltm5vDRLhMf83jQGQQ";
+const SB_H = { "apikey": SB_KEY, "Authorization": `Bearer ${SB_KEY}`, "Content-Type": "application/json" };
+
+const db = {
+  async select(table, qs = "") {
+    const r = await fetch(`${SB_URL}/${table}${qs}`, { headers: SB_H });
+    if (!r.ok) { console.error("db.select error", table, await r.text()); return []; }
+    return r.json();
+  },
+  async insert(table, rows) {
+    const r = await fetch(`${SB_URL}/${table}`, {
+      method: "POST", headers: { ...SB_H, "Prefer": "return=minimal" },
+      body: JSON.stringify(rows)
+    });
+    if (!r.ok) console.error("db.insert error", table, await r.text());
+  },
+  async update(table, qs, data) {
+    const r = await fetch(`${SB_URL}/${table}${qs}`, {
+      method: "PATCH", headers: { ...SB_H, "Prefer": "return=minimal" },
+      body: JSON.stringify(data)
+    });
+    if (!r.ok) console.error("db.update error", table, await r.text());
+  },
+  async remove(table, qs) {
+    const r = await fetch(`${SB_URL}/${table}${qs}`, { method: "DELETE", headers: SB_H });
+    if (!r.ok) console.error("db.remove error", table, await r.text());
+  },
+};
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -466,7 +491,7 @@ function CalendarTab({ calTasks, calDone, setCalDone, onAdd, onDelete, onSpawnPa
     const rect = e.currentTarget.getBoundingClientRect();
     const nowDone = !calDone[task.id];
     setCalDone(prev => ({ ...prev, [task.id]: nowDone }));
-    sb.from('calendar_events').update({ done: nowDone }).eq('id', task.id);
+    db.update('calendar_events', `?id=eq.${task.id}`, { done: nowDone });
     if (nowDone) {
       const oldLvl = lvlOf(stars, levels);
       const ns = stars + task.stars;
@@ -553,7 +578,7 @@ function TasksTab({ cats, done, setDone, onAddCat, onDeleteTask, onSpawnParticle
     const nowDone = !done[task.id];
     const rect = e.currentTarget.getBoundingClientRect();
     setDone(prev => ({ ...prev, [task.id]: nowDone }));
-    sb.from('tasks').update({ done: nowDone }).eq('id', task.id);
+    db.update('tasks', `?id=eq.${task.id}`, { done: nowDone });
     if (nowDone) {
       const oldLvl = lvlOf(stars, levels);
       const ns = stars + task.stars;
@@ -653,9 +678,7 @@ function App() {
   useEffect(() => {
     if (loading) return;
     const t = setTimeout(() => {
-      sb.from('user_state')
-        .update({ total_stars: starsRef.current, updated_at: new Date().toISOString() })
-        .eq('id', 'elyza');
+      db.update('user_state', '?id=eq.elyza', { total_stars: starsRef.current });
     }, 600);
     return () => clearTimeout(t);
   }, [stars]);
@@ -665,16 +688,16 @@ function App() {
     async function loadData() {
       try {
         // Stars
-        const { data: state } = await sb.from('user_state').select('total_stars').eq('id', 'elyza').single();
-        if (state) setStars(state.total_stars);
+        const stateRows = await db.select('user_state', '?id=eq.elyza&select=total_stars');
+        if (stateRows.length > 0) setStars(stateRows[0].total_stars);
 
         // Tasks
-        const { data: tasks } = await sb.from('tasks').select('*');
-        if (!tasks || tasks.length === 0) {
+        const tasks = await db.select('tasks', '?select=*');
+        if (tasks.length === 0) {
           const seed = INIT_CATS.flatMap(cat =>
             cat.tasks.map(t => ({ id: t.id, cat_id: cat.id, name: t.name, stars: t.stars, done: false }))
           );
-          await sb.from('tasks').insert(seed);
+          await db.insert('tasks', seed);
           setCats(INIT_CATS);
           setDone({});
         } else {
@@ -692,8 +715,8 @@ function App() {
         }
 
         // Calendar events
-        const { data: calEvts } = await sb.from('calendar_events').select('*');
-        if (calEvts && calEvts.length > 0) {
+        const calEvts = await db.select('calendar_events', '?select=*');
+        if (calEvts.length > 0) {
           const calDoneMap = {};
           const calList = calEvts.map(e => {
             if (e.done) calDoneMap[e.id] = true;
@@ -734,18 +757,18 @@ function App() {
   }, []);
 
   const addTaskToCat = useCallback(async (catId, task) => {
-    await sb.from('tasks').insert({ id: task.id, cat_id: catId, name: task.name, stars: task.stars, done: false });
+    await db.insert('tasks', { id: task.id, cat_id: catId, name: task.name, stars: task.stars, done: false });
     setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks:[...c.tasks, task] } : c));
   }, []);
 
   const deleteTaskFromCat = useCallback(async (catId, taskId) => {
-    await sb.from('tasks').delete().eq('id', taskId);
+    await db.remove('tasks', `?id=eq.${taskId}`);
     setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks: c.tasks.filter(t => t.id !== taskId) } : c));
     setDone(prev => { const n = {...prev}; delete n[taskId]; return n; });
   }, []);
 
   const addCalTask = useCallback(async (task) => {
-    await sb.from('calendar_events').insert({
+    await db.insert('calendar_events', {
       id: task.id, name: task.name, date: task.date,
       time: task.time || '', description: task.desc || '',
       recur: task.recur, stars: task.stars, done: false
@@ -754,7 +777,7 @@ function App() {
   }, []);
 
   const deleteCalTask = useCallback(async (id) => {
-    await sb.from('calendar_events').delete().eq('id', id);
+    await db.remove('calendar_events', `?id=eq.${id}`);
     setCalTasks(prev => prev.filter(t => t.id !== id));
     setCalDone(prev => { const n={...prev}; delete n[id]; return n; });
   }, []);
