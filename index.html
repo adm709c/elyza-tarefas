@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>✨ Tarefas · Elyza</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; margin: 0; padding: 0; }
+    body { background: #FFF0F6; }
+    ::-webkit-scrollbar { display: none; }
+
+    @keyframes popIn {
+      from { opacity: 0; transform: scale(0.65) translateY(24px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    @keyframes fadeSlide {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes sparkle {
+      0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+      50%       { transform: scale(1.3) rotate(20deg); opacity: 0.8; }
+    }
+
+    .app-wrap {
+      min-height: 100vh;
+      background: #FFF0F6;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", sans-serif;
+      max-width: 430px;
+      margin: 0 auto;
+    }
+    .task-grid { display: block; }
+
+    @media (min-width: 700px) {
+      .app-wrap  { max-width: 700px; }
+      .task-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+      .cat-tabs  { flex-wrap: wrap; }
+    }
+    @media (min-width: 1000px) {
+      .app-wrap  { max-width: 960px; }
+      .task-grid { grid-template-columns: 1fr 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useCallback, useEffect, useMemo } = React;
+
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const PINK = "#FF2D78";
+const BASE_TASK_COUNT = 35;
+
+const BASE_LEVELS = [
+  { level:1, name:"Iniciante",      emoji:"🌸", bMin:0,    bMax:99,       color:"#FFB3C6",
+    phrase:"Todo começo é sagrado, bb. Você não tá só começando uma lista — tá começando uma nova versão de você 🌸" },
+  { level:2, name:"Despertada",     emoji:"🦋", bMin:100,  bMax:249,      color:"#FF85A1",
+    phrase:"Ei, olha você aqui! Acordou, levantou E ainda foi produtiva? Isso não é normal. Você não é normal (elogio máximo) 🦋" },
+  { level:3, name:"Realizadora",    emoji:"🎯", bMin:250,  bMax:499,      color:"#FF4FA3",
+    phrase:"Enquanto todo mundo tava só planejando, você foi lá e fez. Que personagem principal energy isso 💅🎯" },
+  { level:4, name:"Conquistadora",  emoji:"💪", bMin:500,  bMax:799,      color:"#C77DFF",
+    phrase:"Mana, você literalmente come obstáculos no café da manhã. Com granola e tudo. Impressionante 💪✨" },
+  { level:5, name:"Transformadora", emoji:"🏆", bMin:800,  bMax:1199,     color:"#FF9F43",
+    phrase:"A versão de você de 3 meses atrás não te reconheceria mais. Esse glow up é real e é seu 🏆🔥" },
+  { level:6, name:"Inspiradora",    emoji:"⚡", bMin:1200, bMax:1699,     color:"#FF2D78",
+    phrase:"Ei, você sabe que as pessoas ao redor de você já começaram a se mover por sua causa? Impacto silencioso é o tipo mais poderoso ⚡💗" },
+  { level:7, name:"Lendária",       emoji:"👑", bMin:1700, bMax:Infinity, color:"#FFD700",
+    phrase:"LENDÁRIA. Não é um nível, é um estilo de vida. E você escolheu viver assim, Elyza. Orgulho absurdo de você 👑✨" },
+];
+
+const TOAST_PHRASES = [
+  "Check! Você tá buildando a versão mais incrível de você mesma 💅",
+  "Para de ser tão produtiva, você tá me constrangendo 😭✨",
+  "Isso aí, rainha. Você tá destruindo essas metas 🔥",
+  "Não é toda gata que também é aplicada. Você é as duas coisas 🩷",
+  "Seu futuro eu tá aqui mandando beijo e muito obrigada 🥹",
+  "Main character energy ATIVADA ✨👑",
+  "Era pra ser difícil e você fez parecer fácil. Genial 💪",
+  "Disciplina hits different quando você tem estilo 💅🌸",
+  "Sim, você pode comemorar. Você merece, bb 🎉",
+  "Checou mais uma e ainda tá linda? Que injustiça 😭💗",
+  "Produtiva E gata? Isso não deveria ser permitido 🌟",
+  "Se motivação fosse pessoa, seria você, literalmente 🦋",
+  "Olha o que você tá fazendo com a sua vida. Orgulho 🥲",
+  "Isso não tá fácil não, e você tá mandando bem demais 💪🩷",
+  "A academia da vida e você tá na fila do café já com a caneca cheia ☕✨",
+];
+
+const INIT_CATS = [
+  { id:"habits",    name:"Hábitos & Saúde", icon:"🌿", color:"#FF6B9D", tasks:[
+    { id:"h1",  name:"Ler 10 páginas",                           stars:10 },
+    { id:"h2",  name:"Finalizar 1ª leitura do mês",              stars:30 },
+    { id:"h3",  name:"Iniciar um novo livro",                    stars:15 },
+    { id:"h4",  name:"Finalizar 2° Livro do mês",                stars:50 },
+    { id:"h5",  name:"Primeiro treino em Casa",                  stars:20 },
+    { id:"h6",  name:"1 semana de Vacuum",                       stars:40 },
+    { id:"h7",  name:"3 Treinos em casa seguidos",               stars:60 },
+    { id:"h8",  name:"Ler 3 capítulos de Eclesiastes",           stars:20 },
+    { id:"h9",  name:"Finalizar Eclesiastes",                    stars:40 },
+    { id:"h10", name:"1 semana sem Fast Food",                   stars:50 },
+    { id:"h11", name:"Marcar Consultas",                         stars:15 },
+    { id:"h12", name:"Marcar Exames",                            stars:15 },
+  ]},
+  { id:"places",    name:"Lugares",         icon:"📍", color:"#FF9F43", tasks:[
+    { id:"p1", name:"Visitar um novo Restaurante", stars:25 },
+    { id:"p2", name:"Ir ao Zoológico",             stars:30 },
+  ]},
+  { id:"study",     name:"Estudos",         icon:"📚", color:"#A29BFE", tasks:[
+    { id:"s1", name:"Entregar Trabalho da Faculdade (EAD)",                stars:40 },
+    { id:"s2", name:"Apresentar trabalho na faculdade",                    stars:50 },
+    { id:"s3", name:"Apresentar trabalho na escola",                       stars:50 },
+    { id:"s4", name:"Finalizar questionários da 4ª Unidade (EAD)",        stars:30 },
+    { id:"s5", name:"Estudar para Bioquímica (semestral)",                 stars:60 },
+    { id:"s6", name:"Estudar para Fisiologia Neuroendócrina (semestral)",  stars:60 },
+    { id:"s7", name:"Estudar para Química Orgânica (semestral)",           stars:60 },
+    { id:"s8", name:"Novos flashcards",                                    stars:15 },
+  ]},
+  { id:"content",   name:"Conteúdo",        icon:"🎬", color:"#FD79A8", tasks:[
+    { id:"c1",  name:"Postar o primeiro vídeo de reflexão",       stars:40 },
+    { id:"c2",  name:"Postar 1° Foodvlog",                       stars:40 },
+    { id:"c3",  name:"Postar o 1° carrossel do mês",             stars:20 },
+    { id:"c4",  name:"Postar 4 stories para UniFECAF",           stars:20 },
+    { id:"c5",  name:"Postar um Reels para UniFECAF",            stars:30 },
+    { id:"c6",  name:"Postar um Reels para Caderno Inteligente", stars:30 },
+    { id:"c7",  name:"Postar um Reels para NewPen",              stars:30 },
+    { id:"c8",  name:"Fazer roteiros de Publicidades",           stars:25 },
+    { id:"c9",  name:"Postar Vídeo para SHEIN GYM",             stars:35 },
+    { id:"c10", name:"Postar vídeo para SHEIN (publi de Maio)",  stars:35 },
+  ]},
+  { id:"knowledge", name:"Conhecimento",    icon:"🧠", color:"#D63AF9", tasks:[
+    { id:"k1", name:"Iniciar um novo curso",                            stars:30 },
+    { id:"k2", name:"Ouvir mais Podcasts",                             stars:10 },
+    { id:"k3", name:"Estudar um assunto que gosta (ex: Neurociência)", stars:20 },
+  ]},
+  { id:"dates",     name:"Relacionamentos", icon:"💑", color:"#FF4FA3", tasks:[
+    { id:"d1", name:"Dia de filmes",                     stars:20 },
+    { id:"d2", name:"Piquenique ao ar Livre",            stars:30 },
+    { id:"d3", name:"Cozinhar Juntos na Refeição livre", stars:25 },
+  ]},
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function buildLevels(total) {
+  const s = Math.max(1, total / BASE_TASK_COUNT);
+  return BASE_LEVELS.map(l => ({
+    ...l,
+    min: l.bMin === 0 ? 0 : Math.round(l.bMin * s),
+    max: l.bMax === Infinity ? Infinity : Math.round(l.bMax * s),
+  }));
+}
+function lvlOf(stars, levels) {
+  for (let i = levels.length - 1; i >= 0; i--) if (stars >= levels[i].min) return levels[i];
+  return levels[0];
+}
+function progressOf(stars, levels) {
+  const l = lvlOf(stars, levels);
+  if (l.max === Infinity) return 100;
+  return Math.min(100, Math.round(((stars - l.min) / (l.max - l.min + 1)) * 100));
+}
+function toNextLvl(stars, levels) {
+  const l = lvlOf(stars, levels);
+  return l.max === Infinity ? 0 : l.max + 1 - stars;
+}
+function greeting() {
+  const h = new Date().getHours();
+  if (h >= 5  && h < 12) return "Bom dia";
+  if (h >= 12 && h < 18) return "Boa tarde";
+  return "Boa noite";
+}
+function todayISO() { return new Date().toISOString().split("T")[0]; }
+function fmtDate(s) {
+  if (!s) return "";
+  const [y,m,d] = s.split("-");
+  return `${d}/${m}/${y}`;
+}
+function weekDays() {
+  const t = new Date(), day = t.getDay();
+  const mon = new Date(t);
+  mon.setDate(t.getDate() - ((day + 6) % 7));
+  return Array.from({length:7}, (_,i) => {
+    const d = new Date(mon);
+    d.setDate(mon.getDate() + i);
+    return d.toISOString().split("T")[0];
+  });
+}
+const DN = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
+
+// ── Particle ──────────────────────────────────────────────────────────────────
+
+function Particle({ x, y, onDone }) {
+  const [op,  setOp]  = useState(1);
+  const [tr,  setTr]  = useState("translateY(0) scale(1)");
+  const [trs, setTrs] = useState("none");
+  useEffect(() => {
+    const r = requestAnimationFrame(() => { setOp(0); setTr("translateY(-70px) scale(1.6)"); setTrs("all 0.75s cubic-bezier(0.2,0.8,0.4,1)"); });
+    const t = setTimeout(onDone, 800);
+    return () => { cancelAnimationFrame(r); clearTimeout(t); };
+  }, []);
+  return <div style={{ position:"fixed", left:x, top:y, fontSize:18, pointerEvents:"none", zIndex:9999, userSelect:"none", opacity:op, transform:tr, transition:trs }}>⭐</div>;
+}
+
+// ── Level-Up Modal ────────────────────────────────────────────────────────────
+
+function LevelUpModal({ level, onClose }) {
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(100,0,50,0.45)", backdropFilter:"blur(14px)", WebkitBackdropFilter:"blur(14px)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:9998 }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"white", borderRadius:28, padding:"44px 36px", textAlign:"center", maxWidth:320, width:"88%", boxShadow:`0 40px 80px ${level.color}44`, animation:"popIn 0.45s cubic-bezier(0.34,1.56,0.64,1) both", border:`2px solid ${level.color}33` }}>
+        <div style={{ fontSize:64, lineHeight:1, marginBottom:14, animation:"sparkle 1s ease infinite" }}>{level.emoji}</div>
+        <div style={{ fontSize:11, fontWeight:700, letterSpacing:"1.8px", color:level.color, textTransform:"uppercase", marginBottom:8 }}>✨ Nível {level.level} Desbloqueado ✨</div>
+        <div style={{ fontSize:28, fontWeight:800, color:"#1C1C1E", marginBottom:16 }}>{level.name}</div>
+        <div style={{ fontSize:14, color:"#555", lineHeight:1.7, marginBottom:28, fontStyle:"italic", padding:"0 4px", background:"#FFF0F6", borderRadius:12, padding:"14px 16px" }}>"{level.phrase}"</div>
+        <button onClick={onClose} style={{ width:"100%", padding:"15px 0", background:`linear-gradient(135deg, ${level.color}, #FF85A1)`, color:"white", border:"none", borderRadius:14, fontSize:16, fontWeight:700, cursor:"pointer", boxShadow:`0 6px 20px ${level.color}55` }}>Arrasou! 💅</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+
+function Toast({ message, onDone }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const show = requestAnimationFrame(() => setVisible(true));
+    const hide = setTimeout(() => setVisible(false), 2600);
+    const done = setTimeout(onDone, 3200);
+    return () => { cancelAnimationFrame(show); clearTimeout(hide); clearTimeout(done); };
+  }, []);
+  return (
+    <div style={{ position:"fixed", bottom:90, left:"50%", transform:`translateX(-50%) translateY(${visible?0:20}px)`, opacity:visible?1:0, transition:"all 0.4s cubic-bezier(0.34,1.56,0.64,1)", zIndex:8000, pointerEvents:"none", width:"calc(100% - 40px)", maxWidth:380 }}>
+      <div style={{ background:"linear-gradient(135deg, #6B0050, #C0195A)", borderRadius:18, padding:"14px 18px", display:"flex", alignItems:"flex-start", gap:12, boxShadow:"0 8px 32px rgba(200,0,80,0.3)" }}>
+        <span style={{ fontSize:20, flexShrink:0, marginTop:1 }}>💗</span>
+        <span style={{ fontSize:13.5, color:"white", lineHeight:1.5, fontWeight:400 }}>{message}</span>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Task Modal ────────────────────────────────────────────────────────────
+
+function AddTaskModal({ cats, defaultCat, onAdd, onClose }) {
+  const [name, setName] = useState("");
+  const [cat,  setCat]  = useState(defaultCat || cats[0]?.id || "");
+  const [pts,  setPts]  = useState(20);
+  const [err,  setErr]  = useState("");
+
+  const inp = { width:"100%", padding:"11px 14px", border:"1.5px solid #FFD6E7", borderRadius:10, fontSize:15, color:"#1C1C1E", background:"white", outline:"none", fontFamily:"inherit" };
+  const lbl = { fontSize:13, fontWeight:600, color:"#3A3A3C", marginBottom:6, display:"block" };
+
+  const submit = () => {
+    if (!name.trim()) { setErr("Ei, esqueceu o nome! 🙈"); return; }
+    onAdd({ name:name.trim(), cat, pts:Number(pts) });
+    onClose();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(100,0,50,0.35)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:9000, padding:"0 0 16px" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"white", borderRadius:"24px 24px 20px 20px", padding:"24px 20px 20px", width:"100%", maxWidth:500, boxShadow:"0 -8px 40px rgba(200,0,80,0.18)", animation:"popIn 0.3s ease both" }}>
+        <div style={{ width:36, height:4, background:"#FFD6E7", borderRadius:2, margin:"0 auto 20px" }}/>
+        <div style={{ fontSize:18, fontWeight:700, color:"#1C1C1E", marginBottom:20 }}>✨ Nova Tarefa</div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Nome *</label>
+          <input autoFocus style={{ ...inp, borderColor:err?"#FF2D78":"#FFD6E7" }}
+            placeholder="Ex: Correr 30 minutos 💪"
+            value={name} onChange={e=>{setName(e.target.value);setErr("");}}
+            onKeyDown={e=>e.key==="Enter"&&submit()} />
+          {err && <p style={{ fontSize:12, color:"#FF2D78", marginTop:4 }}>{err}</p>}
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Categoria</label>
+          <select value={cat} onChange={e=>setCat(e.target.value)}
+            style={{ ...inp, appearance:"none", backgroundImage:"url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23FF85A1' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")", backgroundRepeat:"no-repeat", backgroundPosition:"right 14px center", paddingRight:36 }}>
+            {cats.map(c=><option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+          </select>
+        </div>
+
+        <div style={{ marginBottom:22 }}>
+          <label style={lbl}>Estrelinhas ao concluir: <span style={{ color:"#FF2D78", fontWeight:700 }}>⭐ {pts}</span></label>
+          <input type="range" min={5} max={100} step={5} value={pts} onChange={e=>setPts(e.target.value)} style={{ width:"100%", accentColor:PINK }}/>
+          <div style={{ display:"flex", justifyContent:"space-between", fontSize:11, color:"#FF85A1", marginTop:3 }}><span>5 ⭐</span><span>100 ⭐</span></div>
+        </div>
+
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"14px 0", background:"#FFF0F6", color:"#888", border:"none", borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
+          <button onClick={submit}  style={{ flex:2, padding:"14px 0", background:`linear-gradient(135deg, ${PINK}, #FF85A1)`, color:"white", border:"none", borderRadius:14, fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:`0 4px 16px ${PINK}44` }}>Adicionar 🌸</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Add Calendar Task Modal ───────────────────────────────────────────────────
+
+function AddCalModal({ onAdd, onClose }) {
+  const [name,  setName]  = useState("");
+  const [date,  setDate]  = useState(todayISO());
+  const [time,  setTime]  = useState("");
+  const [desc,  setDesc]  = useState("");
+  const [recur, setRecur] = useState("once");
+  const [pts,   setPts]   = useState(15);
+  const [err,   setErr]   = useState("");
+
+  const inp = { width:"100%", padding:"11px 14px", border:"1.5px solid #FFD6E7", borderRadius:10, fontSize:15, color:"#1C1C1E", background:"white", outline:"none", fontFamily:"inherit" };
+  const lbl = { fontSize:13, fontWeight:600, color:"#3A3A3C", marginBottom:6, display:"block" };
+
+  const submit = () => {
+    if (!name.trim()) { setErr("Ei, esqueceu o nome! 🙈"); return; }
+    if (!date)        { setErr("Seleciona uma data, bb."); return; }
+    onAdd({ id:`cal-${Date.now()}`, name:name.trim(), date, time, desc:desc.trim(), recur, stars:Number(pts) });
+    onClose();
+  };
+
+  return (
+    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(100,0,50,0.35)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", display:"flex", alignItems:"flex-end", justifyContent:"center", zIndex:9000, padding:"0 0 16px" }}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"white", borderRadius:"24px 24px 20px 20px", padding:"24px 20px 20px", width:"100%", maxWidth:500, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 -8px 40px rgba(200,0,80,0.18)", animation:"popIn 0.3s ease both" }}>
+        <div style={{ width:36, height:4, background:"#FFD6E7", borderRadius:2, margin:"0 auto 20px" }}/>
+        <div style={{ fontSize:18, fontWeight:700, color:"#1C1C1E", marginBottom:20 }}>📅 Nova Tarefa no Calendário</div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Nome *</label>
+          <input autoFocus style={{ ...inp, borderColor:err?"#FF2D78":"#FFD6E7" }}
+            placeholder="Ex: Revisar Bioquímica 📚"
+            value={name} onChange={e=>{setName(e.target.value);setErr("");}}
+            onKeyDown={e=>e.key==="Enter"&&submit()} />
+          {err && <p style={{ fontSize:12, color:"#FF2D78", marginTop:4 }}>{err}</p>}
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:14 }}>
+          <div><label style={lbl}>Data *</label><input type="date" style={inp} value={date} onChange={e=>setDate(e.target.value)}/></div>
+          <div><label style={lbl}>Horário</label><input type="time" style={inp} value={time} onChange={e=>setTime(e.target.value)}/></div>
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Descrição (opcional)</label>
+          <textarea style={{ ...inp, resize:"vertical", minHeight:68, lineHeight:1.5 }}
+            placeholder="Detalhes, anotações, o que vier na cabeça..."
+            value={desc} onChange={e=>setDesc(e.target.value)} />
+        </div>
+
+        <div style={{ marginBottom:14 }}>
+          <label style={lbl}>Recorrência</label>
+          <div style={{ display:"flex", gap:8 }}>
+            {[["once","Uma vez 🎯"],["daily","Diária 🔁"],["weekly","Semanal 📅"]].map(([v,l])=>(
+              <button key={v} onClick={()=>setRecur(v)}
+                style={{ flex:1, padding:"9px 4px", borderRadius:10, border:"1.5px solid", borderColor:recur===v?PINK:"#FFD6E7", background:recur===v?"#FFF0F6":"white", color:recur===v?PINK:"#AAAAAA", fontSize:12, fontWeight:recur===v?700:400, cursor:"pointer" }}>
+                {l}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ marginBottom:22 }}>
+          <label style={lbl}>Estrelinhas: <span style={{ color:PINK, fontWeight:700 }}>⭐ {pts}</span></label>
+          <input type="range" min={5} max={100} step={5} value={pts} onChange={e=>setPts(e.target.value)} style={{ width:"100%", accentColor:PINK }}/>
+        </div>
+
+        <div style={{ display:"flex", gap:10 }}>
+          <button onClick={onClose} style={{ flex:1, padding:"14px 0", background:"#FFF0F6", color:"#888", border:"none", borderRadius:14, fontSize:15, fontWeight:600, cursor:"pointer" }}>Cancelar</button>
+          <button onClick={submit}  style={{ flex:2, padding:"14px 0", background:`linear-gradient(135deg, ${PINK}, #FF85A1)`, color:"white", border:"none", borderRadius:14, fontSize:15, fontWeight:700, cursor:"pointer", boxShadow:`0 4px 16px ${PINK}44` }}>Adicionar 🌸</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Task Card ─────────────────────────────────────────────────────────────────
+
+function TaskCard({ task, done, color, onToggle, onDelete }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"13px 14px", background:done?"#FFF8FB":"white", borderRadius:16, marginBottom:8, opacity:done?0.5:1, boxShadow:done?"none":`0 2px 8px ${color}20, 0 0 0 1px ${color}15`, border:`1px solid ${done?"#FFE4EE":"transparent"}`, transition:"opacity 0.25s ease, background 0.25s ease", userSelect:"none", animation:"fadeSlide 0.18s ease both" }}>
+      {/* Checkbox */}
+      <div onClick={onToggle} style={{ width:24, height:24, borderRadius:"50%", flexShrink:0, border:done?"none":`2px solid ${color}`, background:done?color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.25s ease", cursor:"pointer" }}>
+        {done && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </div>
+      {/* Name */}
+      <span onClick={onToggle} style={{ flex:1, fontSize:15, fontWeight:400, color:done?"#C0A0AC":"#1C1C1E", textDecoration:done?"line-through":"none", lineHeight:1.35, transition:"all 0.25s ease", cursor:"pointer" }}>
+        {task.name}
+      </span>
+      {/* Stars badge */}
+      {!done && (
+        <div style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:20, flexShrink:0, background:"#FFF0F6", border:`1px solid ${color}44` }}>
+          <span style={{ fontSize:11 }}>⭐</span>
+          <span style={{ fontSize:12, fontWeight:700, color }}>+{task.stars}</span>
+        </div>
+      )}
+      {/* Delete */}
+      <button
+        onClick={e => { e.stopPropagation(); onDelete(); }}
+        style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"#DDBBCC", padding:"2px 4px", lineHeight:1, flexShrink:0 }}
+      >✕</button>
+    </div>
+  );
+}
+
+// ── Calendar Task Card ────────────────────────────────────────────────────────
+
+function CalCard({ task, done, onToggle, onDelete }) {
+  const today   = todayISO();
+  const overdue = !done && task.date < today;
+  const isToday = task.date === today;
+  const recurTag = task.recur==="daily"?"🔁 Diária":task.recur==="weekly"?"📅 Semanal":null;
+  return (
+    <div style={{ display:"flex", gap:12, padding:"14px", background:done?"#FFF8FB":"white", borderRadius:16, marginBottom:8, opacity:done?0.55:1, boxShadow:done?"none":"0 2px 8px rgba(255,45,120,0.1)", border:`1px solid ${overdue?"#FF2D7833":done?"#FFE4EE":"transparent"}`, animation:"fadeSlide 0.18s ease both" }}>
+      <div onClick={onToggle} style={{ width:24, height:24, borderRadius:"50%", flexShrink:0, border:done?"none":`2px solid ${overdue?"#FF2D78":PINK}`, background:done?PINK:"transparent", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", marginTop:1, transition:"all 0.2s ease" }}>
+        {done && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+      </div>
+      <div style={{ flex:1, minWidth:0 }}>
+        <div style={{ fontSize:15, fontWeight:500, color:done?"#C0A0AC":"#1C1C1E", textDecoration:done?"line-through":"none", lineHeight:1.35 }}>{task.name}</div>
+        <div style={{ display:"flex", flexWrap:"wrap", gap:"4px 8px", marginTop:4, alignItems:"center" }}>
+          <span style={{ fontSize:12, color:overdue&&!done?"#FF2D78":"#BBAACC" }}>
+            {isToday?"🩷 Hoje":`📅 ${fmtDate(task.date)}`}{task.time?` · ${task.time}`:""}
+          </span>
+          {recurTag && <span style={{ fontSize:11, color:PINK, fontWeight:500 }}>{recurTag}</span>}
+        </div>
+        {task.desc && <div style={{ fontSize:13, color:"#BBAACC", marginTop:5, lineHeight:1.45 }}>{task.desc}</div>}
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", alignItems:"flex-end", gap:6, flexShrink:0 }}>
+        {!done && (
+          <div style={{ display:"flex", alignItems:"center", gap:2, padding:"2px 7px", borderRadius:20, background:"#FFF0F6", border:`1px solid ${PINK}33` }}>
+            <span style={{ fontSize:10 }}>⭐</span>
+            <span style={{ fontSize:11, fontWeight:700, color:PINK }}>+{task.stars}</span>
+          </div>
+        )}
+        <button onClick={onDelete} style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"#DDBBCC", padding:"2px 4px", lineHeight:1 }}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Calendar Tab ──────────────────────────────────────────────────────────────
+
+function CalendarTab({ calTasks, calDone, setCalDone, onAdd, onDelete, onSpawnParticles, onToast, stars, setStars, levels, setLevelUpData }) {
+  const [view,      setView]      = useState("today");
+  const [showModal, setShowModal] = useState(false);
+  const wDays = useMemo(() => weekDays(), []);
+  const today = todayISO();
+
+  const visible = useMemo(() => {
+    if (view === "today") return calTasks.filter(t => {
+      if (t.recur === "daily") return true;
+      if (t.recur === "weekly") return new Date(t.date+"T12:00").getDay() === new Date(today+"T12:00").getDay();
+      return t.date === today;
+    });
+    if (view === "week") return calTasks.filter(t => {
+      if (t.recur === "daily") return true;
+      if (t.recur === "weekly") return wDays.some(d => new Date(d+"T12:00").getDay() === new Date(t.date+"T12:00").getDay());
+      return wDays.includes(t.date);
+    });
+    return [...calTasks].sort((a,b) => a.date.localeCompare(b.date));
+  }, [calTasks, view, today]);
+
+  const handleToggle = (task, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const nowDone = !calDone[task.id];
+    setCalDone(prev => ({ ...prev, [task.id]: nowDone }));
+    if (nowDone) {
+      const oldLvl = lvlOf(stars, levels);
+      const ns = stars + task.stars;
+      setStars(ns);
+      onSpawnParticles(rect.left + rect.width / 2, rect.top + 6);
+      onToast(TOAST_PHRASES[Math.floor(Math.random() * TOAST_PHRASES.length)]);
+      if (lvlOf(ns, levels).level > oldLvl.level) setTimeout(() => setLevelUpData(lvlOf(ns, levels)), 550);
+    } else {
+      setStars(s => Math.max(0, s - task.stars));
+    }
+  };
+
+  const vbtn = v => ({
+    flex:1, padding:"8px 0", borderRadius:9, border:"none",
+    background: view===v ? "white" : "transparent",
+    color: view===v ? PINK : "#BBAACC",
+    fontSize:14, fontWeight: view===v ? 700 : 400,
+    cursor:"pointer",
+    boxShadow: view===v ? `0 2px 8px ${PINK}22` : "none",
+    transition:"all 0.2s",
+  });
+
+  return (
+    <div style={{ padding:"16px 16px 88px" }}>
+      <div style={{ display:"flex", gap:4, background:"#FFE4EE", borderRadius:12, padding:3, marginBottom:18 }}>
+        <button style={vbtn("today")} onClick={()=>setView("today")}>Hoje 🌸</button>
+        <button style={vbtn("week")}  onClick={()=>setView("week")}>Semana 🗓️</button>
+        <button style={vbtn("all")}   onClick={()=>setView("all")}>Todas 💫</button>
+      </div>
+
+      {view === "week" && (
+        <div style={{ display:"flex", gap:6, marginBottom:18, overflowX:"auto" }}>
+          {wDays.map(d => {
+            const dt = new Date(d+"T12:00");
+            const isTdy = d === today;
+            const has = calTasks.some(t => t.date===d || t.recur==="daily" || (t.recur==="weekly" && new Date(t.date+"T12:00").getDay()===dt.getDay()));
+            return (
+              <div key={d} style={{ flex:1, textAlign:"center", padding:"8px 4px", borderRadius:12, background:isTdy?PINK:"white", boxShadow:isTdy?`0 4px 12px ${PINK}55`:"0 1px 3px rgba(255,45,120,0.1)", minWidth:40 }}>
+                <div style={{ fontSize:11, color:isTdy?"rgba(255,255,255,0.75)":"#BBAACC", marginBottom:4 }}>{DN[dt.getDay()]}</div>
+                <div style={{ fontSize:16, fontWeight:700, color:isTdy?"white":"#1C1C1E" }}>{dt.getDate()}</div>
+                {has && <div style={{ width:5, height:5, borderRadius:"50%", background:isTdy?"rgba(255,255,255,0.75)":PINK, margin:"4px auto 0" }}/>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {visible.length === 0 ? (
+        <div style={{ textAlign:"center", padding:"50px 16px" }}>
+          <div style={{ fontSize:48, marginBottom:12 }}>🌸</div>
+          <div style={{ fontSize:17, fontWeight:700, color:"#1C1C1E", marginBottom:6 }}>Nada aqui ainda!</div>
+          <div style={{ fontSize:14, color:"#BBAACC" }}>Toca no + pra adicionar sua primeira tarefa ✨</div>
+        </div>
+      ) : visible.map(task => (
+        <CalCard key={task.id} task={task} done={!!calDone[task.id]}
+          onToggle={e => handleToggle(task, e)}
+          onDelete={() => onDelete(task.id)} />
+      ))}
+
+      <button onClick={()=>setShowModal(true)} style={{ position:"fixed", bottom:80, right:20, width:54, height:54, borderRadius:"50%", background:`linear-gradient(135deg, ${PINK}, #FF85A1)`, color:"white", border:"none", fontSize:26, cursor:"pointer", boxShadow:`0 4px 18px ${PINK}55`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:400 }}>+</button>
+
+      {showModal && <AddCalModal onAdd={t=>{onAdd(t);}} onClose={()=>setShowModal(false)} />}
+    </div>
+  );
+}
+
+// ── Tasks Tab ─────────────────────────────────────────────────────────────────
+
+function TasksTab({ cats, done, setDone, onAddCat, onDeleteTask, onSpawnParticles, onToast, stars, setStars, levels, setLevelUpData }) {
+  const [activeTab, setActiveTab] = useState(cats[0]?.id || "");
+  const [showDone,  setShowDone]  = useState(false);
+  const [showModal, setShowModal] = useState(false);
+
+  useEffect(() => {
+    if (!cats.find(c => c.id === activeTab) && cats.length) setActiveTab(cats[0].id);
+  }, [cats]);
+
+  const activeCat = cats.find(c => c.id === activeTab) || cats[0];
+  const allTasks  = activeCat?.tasks ?? [];
+  const doneCount = allTasks.filter(t => done[t.id]).length;
+  const visible   = showDone ? allTasks : allTasks.filter(t => !done[t.id]);
+
+  const handleToggle = useCallback((task, e) => {
+    const nowDone = !done[task.id];
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDone(prev => ({ ...prev, [task.id]: nowDone }));
+    if (nowDone) {
+      const oldLvl = lvlOf(stars, levels);
+      const ns = stars + task.stars;
+      setStars(ns);
+      onSpawnParticles(rect.left + rect.width * 0.5, rect.top + 6);
+      onToast(TOAST_PHRASES[Math.floor(Math.random() * TOAST_PHRASES.length)]);
+      if (lvlOf(ns, levels).level > oldLvl.level) setTimeout(() => setLevelUpData(lvlOf(ns, levels)), 550);
+    } else {
+      setStars(s => Math.max(0, s - task.stars));
+    }
+  }, [stars, done, levels]);
+
+  const handleAdd = ({ name, cat, pts }) => {
+    onAddCat(cat, { id:`c-${Date.now()}`, name, stars:pts });
+  };
+
+  return (
+    <div>
+      <div className="cat-tabs" style={{ overflowX:"auto", display:"flex", gap:6, padding:"14px 16px 6px", background:"#FFF0F6", scrollbarWidth:"none" }}>
+        {cats.map(cat => {
+          const active  = cat.id === activeTab;
+          const catDone = cat.tasks.filter(t => done[t.id]).length;
+          return (
+            <button key={cat.id} onClick={()=>{setActiveTab(cat.id);setShowDone(false);}}
+              style={{ flexShrink:0, display:"flex", flexDirection:"column", alignItems:"center", gap:4, padding:"10px 14px", borderRadius:12, border:"none", background:active?cat.color:"white", cursor:"pointer", transition:"all 0.22s ease", boxShadow:active?`0 4px 14px ${cat.color}55`:`0 1px 3px ${PINK}15`, position:"relative" }}>
+              <span style={{ fontSize:20 }}>{cat.icon}</span>
+              <span style={{ fontSize:10, fontWeight:active?700:400, color:active?"white":"#BBAACC", whiteSpace:"nowrap" }}>{cat.name}</span>
+              {catDone > 0 && (
+                <div style={{ position:"absolute", top:6, right:6, width:15, height:15, borderRadius:"50%", background:active?"rgba(255,255,255,0.9)":cat.color, color:active?cat.color:"white", fontSize:9, fontWeight:800, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {catDone}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ padding:"10px 16px 88px" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:14, paddingTop:10 }}>
+          <div>
+            <h2 style={{ margin:0, fontSize:19, fontWeight:700, color:"#1C1C1E" }}>{activeCat?.icon} {activeCat?.name}</h2>
+            <p style={{ margin:"3px 0 0", fontSize:12, color:"#BBAACC" }}>{doneCount} de {allTasks.length} concluídas 🌸</p>
+          </div>
+          <div style={{ display:"flex", gap:8 }}>
+            {doneCount > 0 && (
+              <button onClick={()=>setShowDone(s=>!s)} style={{ padding:"6px 12px", borderRadius:9, border:`1px solid ${PINK}33`, background:"white", color:PINK, fontSize:12, fontWeight:600, cursor:"pointer" }}>
+                {showDone?"Ocultar ✓":"Ver todas"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {visible.length === 0 ? (
+          <div style={{ textAlign:"center", padding:"48px 16px" }}>
+            <div style={{ fontSize:52, marginBottom:12 }}>🎉</div>
+            <div style={{ fontSize:17, fontWeight:700, color:"#1C1C1E", marginBottom:6 }}>Terminou tudo aqui?!</div>
+            <div style={{ fontSize:14, color:"#BBAACC", marginBottom:20 }}>Para de ser tão produtiva assim 😭✨</div>
+            <button onClick={()=>setShowDone(true)} style={{ padding:"10px 22px", borderRadius:12, border:`1px solid ${PINK}33`, background:"white", color:PINK, fontSize:14, fontWeight:600, cursor:"pointer" }}>Ver concluídas</button>
+          </div>
+        ) : (
+          <div className="task-grid">
+            {visible.map(task => (
+              <TaskCard key={task.id} task={task} done={!!done[task.id]}
+                color={activeCat?.color ?? PINK}
+                onToggle={e => handleToggle(task, e)}
+                onDelete={() => onDeleteTask(activeCat.id, task.id)} />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <button onClick={()=>setShowModal(true)} style={{ position:"fixed", bottom:80, right:20, width:54, height:54, borderRadius:"50%", background:`linear-gradient(135deg, ${PINK}, #FF85A1)`, color:"white", border:"none", fontSize:26, cursor:"pointer", boxShadow:`0 4px 18px ${PINK}55`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:400 }}>+</button>
+
+      {showModal && <AddTaskModal cats={cats} defaultCat={activeTab} onAdd={handleAdd} onClose={()=>setShowModal(false)} />}
+    </div>
+  );
+}
+
+// ── App ────────────────────────────────────────────────────────────────────────
+
+function App() {
+  const [stars,     setStars]     = useState(0);
+  const [done,      setDone]      = useState({});
+  const [cats,      setCats]      = useState(INIT_CATS);
+  const [calTasks,  setCalTasks]  = useState([]);
+  const [calDone,   setCalDone]   = useState({});
+  const [mainTab,   setMainTab]   = useState("tasks");
+  const [levelUp,   setLevelUp]   = useState(null);
+  const [particles, setParticles] = useState([]);
+  const [toasts,    setToasts]    = useState([]);
+
+  const fireToast = useCallback((msg) => {
+    const id = Date.now();
+    setToasts(prev => [...prev.slice(-1), { id, msg }]);
+  }, []);
+
+  const totalTasks = useMemo(() =>
+    cats.reduce((s,c) => s + c.tasks.length, 0) + calTasks.length,
+    [cats, calTasks]
+  );
+  const levels  = useMemo(() => buildLevels(totalTasks), [totalTasks]);
+  const lvl     = lvlOf(stars, levels);
+  const prog    = progressOf(stars, levels);
+  const toNext  = toNextLvl(stars, levels);
+  const allDone = Object.values(done).filter(Boolean).length + Object.values(calDone).filter(Boolean).length;
+
+  const spawnParticles = useCallback((cx, cy) => {
+    setParticles(prev => [...prev, ...Array.from({length:5}, (_,i) => ({
+      id:`${Date.now()}-${i}`,
+      x: cx + (Math.random() - 0.5) * 90,
+      y: cy,
+    }))]);
+  }, []);
+
+  const addTaskToCat = useCallback((catId, task) => {
+    setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks:[...c.tasks, task] } : c));
+  }, []);
+
+  const deleteTaskFromCat = useCallback((catId, taskId) => {
+    setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks: c.tasks.filter(t => t.id !== taskId) } : c));
+    setDone(prev => { const n = {...prev}; delete n[taskId]; return n; });
+  }, []);
+
+  const deleteCalTask = useCallback((id) => {
+    setCalTasks(prev => prev.filter(t => t.id !== id));
+    setCalDone(prev => { const n={...prev}; delete n[id]; return n; });
+  }, []);
+
+  return (
+    <div className="app-wrap">
+      {particles.map(p => <Particle key={p.id} x={p.x} y={p.y} onDone={()=>setParticles(prev=>prev.filter(x=>x.id!==p.id))}/>)}
+      {toasts.map(t => <Toast key={t.id} message={t.msg} onDone={()=>setToasts(prev=>prev.filter(x=>x.id!==t.id))}/>)}
+      {levelUp && <LevelUpModal level={levelUp} onClose={()=>setLevelUp(null)} />}
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <div style={{ background:"linear-gradient(155deg, #3D0035 0%, #7A0A4A 50%, #C01860 100%)", padding:"52px 24px 24px", position:"sticky", top:0, zIndex:100 }}>
+        <div style={{ fontSize:13, color:"rgba(255,200,220,0.8)", marginBottom:4, fontWeight:500 }}>
+          {greeting()}, Elyza 🌸
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:18 }}>
+          <div>
+            <div style={{ fontSize:12, color:"rgba(255,180,210,0.6)", fontWeight:500, marginBottom:3 }}>{lvl.emoji} Nível {lvl.level}</div>
+            <div style={{ fontSize:24, fontWeight:800, color:"white", letterSpacing:-0.5 }}>{lvl.name}</div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:11, color:"rgba(255,180,210,0.6)", marginBottom:2 }}>Estrelinhas</div>
+            <div style={{ fontSize:26, fontWeight:800, color:"#FFD6E7", display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end" }}>
+              <span style={{ fontSize:20 }}>⭐</span>
+              <span>{stars.toLocaleString("pt-BR")}</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:7 }}>
+            <span style={{ fontSize:11, fontWeight:500, color:"rgba(255,180,210,0.65)" }}>Próximo nível · {Math.min(lvl.level+1,7)}</span>
+            <span style={{ fontSize:11, color:"rgba(255,180,210,0.55)" }}>{lvl.max===Infinity?"Nível Máximo! 👑":`faltam ${toNext} ⭐`}</span>
+          </div>
+          <div style={{ height:8, borderRadius:4, background:"rgba(255,255,255,0.15)", overflow:"hidden" }}>
+            <div style={{ height:"100%", borderRadius:4, width:`${prog}%`, background:`linear-gradient(90deg, #FFB3C6, #FF4FA3)`, boxShadow:"0 0 10px #FF4FA355", transition:"width 0.7s cubic-bezier(0.4,0,0.2,1)" }}/>
+          </div>
+          <div style={{ display:"flex", justifyContent:"space-between", marginTop:6 }}>
+            <span style={{ fontSize:11, color:"rgba(255,180,210,0.45)" }}>{allDone} concluídas · {totalTasks} total</span>
+            <span style={{ fontSize:11, fontWeight:700, color:"#FFB3C6" }}>{prog}%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Content ────────────────────────────────────────────────────────── */}
+      {mainTab === "tasks" ? (
+        <TasksTab
+          cats={cats} done={done} setDone={setDone}
+          onAddCat={addTaskToCat}
+          onDeleteTask={deleteTaskFromCat}
+          onSpawnParticles={spawnParticles}
+          onToast={fireToast}
+          stars={stars} setStars={setStars}
+          levels={levels} setLevelUpData={setLevelUp}
+        />
+      ) : (
+        <CalendarTab
+          calTasks={calTasks} calDone={calDone} setCalDone={setCalDone}
+          onAdd={t=>setCalTasks(prev=>[...prev,t])}
+          onDelete={deleteCalTask}
+          onSpawnParticles={spawnParticles}
+          onToast={fireToast}
+          stars={stars} setStars={setStars}
+          levels={levels} setLevelUpData={setLevelUp}
+        />
+      )}
+
+      {/* ── Bottom Tab Bar ─────────────────────────────────────────────────── */}
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)", width:"100%", maxWidth:"inherit", background:"rgba(255,240,246,0.96)", backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)", borderTop:`1px solid ${PINK}22`, display:"flex", zIndex:200 }}>
+        {[
+          { id:"tasks",    icon:"✅", label:"Tarefas"    },
+          { id:"calendar", icon:"🌸", label:"Calendário" },
+        ].map(tab => (
+          <button key={tab.id} onClick={()=>setMainTab(tab.id)}
+            style={{ flex:1, padding:"10px 0 12px", border:"none", background:"transparent", display:"flex", flexDirection:"column", alignItems:"center", gap:3, cursor:"pointer", position:"relative" }}>
+            <span style={{ fontSize:22 }}>{tab.icon}</span>
+            <span style={{ fontSize:10, fontWeight:mainTab===tab.id?700:400, color:mainTab===tab.id?PINK:"#CCAABB" }}>{tab.label}</span>
+            {mainTab===tab.id && <div style={{ position:"absolute", bottom:4, width:20, height:3, borderRadius:2, background:PINK }}/>}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
