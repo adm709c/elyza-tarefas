@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>✨ Tarefas · Elyza</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -23,6 +24,9 @@
     @keyframes sparkle {
       0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
       50%       { transform: scale(1.3) rotate(20deg); opacity: 0.8; }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
     }
 
     .app-wrap {
@@ -49,7 +53,13 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useCallback, useEffect, useMemo } = React;
+const { useState, useCallback, useEffect, useMemo, useRef } = React;
+
+// ── Supabase ──────────────────────────────────────────────────────────────────
+
+const SUPABASE_URL = "https://qqzspssukazsftxopqfg.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFxenNwc3N1a2F6c2Z0eG9wcWZnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0NTM4MTUsImV4cCI6MjA5NDAyOTgxNX0.aVLhIGi5BETdlA2bDD5HQZkfzltm5vDRLhMf83jQGQQ";
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -214,7 +224,7 @@ function LevelUpModal({ level, onClose }) {
         <div style={{ fontSize:64, lineHeight:1, marginBottom:14, animation:"sparkle 1s ease infinite" }}>{level.emoji}</div>
         <div style={{ fontSize:11, fontWeight:700, letterSpacing:"1.8px", color:level.color, textTransform:"uppercase", marginBottom:8 }}>✨ Nível {level.level} Desbloqueado ✨</div>
         <div style={{ fontSize:28, fontWeight:800, color:"#1C1C1E", marginBottom:16 }}>{level.name}</div>
-        <div style={{ fontSize:14, color:"#555", lineHeight:1.7, marginBottom:28, fontStyle:"italic", padding:"0 4px", background:"#FFF0F6", borderRadius:12, padding:"14px 16px" }}>"{level.phrase}"</div>
+        <div style={{ fontSize:14, color:"#555", lineHeight:1.7, marginBottom:28, fontStyle:"italic", background:"#FFF0F6", borderRadius:12, padding:"14px 16px" }}>"{level.phrase}"</div>
         <button onClick={onClose} style={{ width:"100%", padding:"15px 0", background:`linear-gradient(135deg, ${level.color}, #FF85A1)`, color:"white", border:"none", borderRadius:14, fontSize:16, fontWeight:700, cursor:"pointer", boxShadow:`0 6px 20px ${level.color}55` }}>Arrasou! 💅</button>
       </div>
     </div>
@@ -375,22 +385,18 @@ function AddCalModal({ onAdd, onClose }) {
 function TaskCard({ task, done, color, onToggle, onDelete }) {
   return (
     <div style={{ display:"flex", alignItems:"center", gap:10, padding:"13px 14px", background:done?"#FFF8FB":"white", borderRadius:16, marginBottom:8, opacity:done?0.5:1, boxShadow:done?"none":`0 2px 8px ${color}20, 0 0 0 1px ${color}15`, border:`1px solid ${done?"#FFE4EE":"transparent"}`, transition:"opacity 0.25s ease, background 0.25s ease", userSelect:"none", animation:"fadeSlide 0.18s ease both" }}>
-      {/* Checkbox */}
       <div onClick={onToggle} style={{ width:24, height:24, borderRadius:"50%", flexShrink:0, border:done?"none":`2px solid ${color}`, background:done?color:"transparent", display:"flex", alignItems:"center", justifyContent:"center", transition:"all 0.25s ease", cursor:"pointer" }}>
         {done && <svg width="11" height="8" viewBox="0 0 11 8" fill="none"><path d="M1 4L4 7L10 1" stroke="white" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
       </div>
-      {/* Name */}
       <span onClick={onToggle} style={{ flex:1, fontSize:15, fontWeight:400, color:done?"#C0A0AC":"#1C1C1E", textDecoration:done?"line-through":"none", lineHeight:1.35, transition:"all 0.25s ease", cursor:"pointer" }}>
         {task.name}
       </span>
-      {/* Stars badge */}
       {!done && (
         <div style={{ display:"flex", alignItems:"center", gap:3, padding:"3px 8px", borderRadius:20, flexShrink:0, background:"#FFF0F6", border:`1px solid ${color}44` }}>
           <span style={{ fontSize:11 }}>⭐</span>
           <span style={{ fontSize:12, fontWeight:700, color }}>+{task.stars}</span>
         </div>
       )}
-      {/* Delete */}
       <button
         onClick={e => { e.stopPropagation(); onDelete(); }}
         style={{ background:"none", border:"none", cursor:"pointer", fontSize:14, color:"#DDBBCC", padding:"2px 4px", lineHeight:1, flexShrink:0 }}
@@ -460,6 +466,7 @@ function CalendarTab({ calTasks, calDone, setCalDone, onAdd, onDelete, onSpawnPa
     const rect = e.currentTarget.getBoundingClientRect();
     const nowDone = !calDone[task.id];
     setCalDone(prev => ({ ...prev, [task.id]: nowDone }));
+    sb.from('calendar_events').update({ done: nowDone }).eq('id', task.id);
     if (nowDone) {
       const oldLvl = lvlOf(stars, levels);
       const ns = stars + task.stars;
@@ -521,7 +528,7 @@ function CalendarTab({ calTasks, calDone, setCalDone, onAdd, onDelete, onSpawnPa
 
       <button onClick={()=>setShowModal(true)} style={{ position:"fixed", bottom:80, right:20, width:54, height:54, borderRadius:"50%", background:`linear-gradient(135deg, ${PINK}, #FF85A1)`, color:"white", border:"none", fontSize:26, cursor:"pointer", boxShadow:`0 4px 18px ${PINK}55`, display:"flex", alignItems:"center", justifyContent:"center", zIndex:400 }}>+</button>
 
-      {showModal && <AddCalModal onAdd={t=>{onAdd(t);}} onClose={()=>setShowModal(false)} />}
+      {showModal && <AddCalModal onAdd={t=>{onAdd(t); setShowModal(false);}} onClose={()=>setShowModal(false)} />}
     </div>
   );
 }
@@ -546,6 +553,7 @@ function TasksTab({ cats, done, setDone, onAddCat, onDeleteTask, onSpawnParticle
     const nowDone = !done[task.id];
     const rect = e.currentTarget.getBoundingClientRect();
     setDone(prev => ({ ...prev, [task.id]: nowDone }));
+    sb.from('tasks').update({ done: nowDone }).eq('id', task.id);
     if (nowDone) {
       const oldLvl = lvlOf(stars, levels);
       const ns = stars + task.stars;
@@ -627,6 +635,7 @@ function TasksTab({ cats, done, setDone, onAddCat, onDeleteTask, onSpawnParticle
 // ── App ────────────────────────────────────────────────────────────────────────
 
 function App() {
+  const [loading,   setLoading]   = useState(true);
   const [stars,     setStars]     = useState(0);
   const [done,      setDone]      = useState({});
   const [cats,      setCats]      = useState(INIT_CATS);
@@ -636,6 +645,70 @@ function App() {
   const [levelUp,   setLevelUp]   = useState(null);
   const [particles, setParticles] = useState([]);
   const [toasts,    setToasts]    = useState([]);
+
+  const starsRef = useRef(0);
+  starsRef.current = stars;
+
+  // Debounced stars sync to Supabase
+  useEffect(() => {
+    if (loading) return;
+    const t = setTimeout(() => {
+      sb.from('user_state')
+        .update({ total_stars: starsRef.current, updated_at: new Date().toISOString() })
+        .eq('id', 'elyza');
+    }, 600);
+    return () => clearTimeout(t);
+  }, [stars]);
+
+  // Load all data from Supabase on mount
+  useEffect(() => {
+    async function loadData() {
+      try {
+        // Stars
+        const { data: state } = await sb.from('user_state').select('total_stars').eq('id', 'elyza').single();
+        if (state) setStars(state.total_stars);
+
+        // Tasks
+        const { data: tasks } = await sb.from('tasks').select('*');
+        if (!tasks || tasks.length === 0) {
+          const seed = INIT_CATS.flatMap(cat =>
+            cat.tasks.map(t => ({ id: t.id, cat_id: cat.id, name: t.name, stars: t.stars, done: false }))
+          );
+          await sb.from('tasks').insert(seed);
+          setCats(INIT_CATS);
+          setDone({});
+        } else {
+          const doneMap = {};
+          const catTaskMap = {};
+          INIT_CATS.forEach(cat => { catTaskMap[cat.id] = []; });
+          tasks.forEach(t => {
+            if (t.done) doneMap[t.id] = true;
+            if (catTaskMap[t.cat_id] !== undefined) {
+              catTaskMap[t.cat_id].push({ id: t.id, name: t.name, stars: t.stars });
+            }
+          });
+          setCats(INIT_CATS.map(cat => ({ ...cat, tasks: catTaskMap[cat.id] || [] })));
+          setDone(doneMap);
+        }
+
+        // Calendar events
+        const { data: calEvts } = await sb.from('calendar_events').select('*');
+        if (calEvts && calEvts.length > 0) {
+          const calDoneMap = {};
+          const calList = calEvts.map(e => {
+            if (e.done) calDoneMap[e.id] = true;
+            return { id: e.id, name: e.name, date: e.date, time: e.time || '', desc: e.description || '', recur: e.recur, stars: e.stars };
+          });
+          setCalTasks(calList);
+          setCalDone(calDoneMap);
+        }
+      } catch (err) {
+        console.error('Erro ao carregar dados:', err);
+      }
+      setLoading(false);
+    }
+    loadData();
+  }, []);
 
   const fireToast = useCallback((msg) => {
     const id = Date.now();
@@ -660,19 +733,41 @@ function App() {
     }))]);
   }, []);
 
-  const addTaskToCat = useCallback((catId, task) => {
+  const addTaskToCat = useCallback(async (catId, task) => {
+    await sb.from('tasks').insert({ id: task.id, cat_id: catId, name: task.name, stars: task.stars, done: false });
     setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks:[...c.tasks, task] } : c));
   }, []);
 
-  const deleteTaskFromCat = useCallback((catId, taskId) => {
+  const deleteTaskFromCat = useCallback(async (catId, taskId) => {
+    await sb.from('tasks').delete().eq('id', taskId);
     setCats(prev => prev.map(c => c.id === catId ? { ...c, tasks: c.tasks.filter(t => t.id !== taskId) } : c));
     setDone(prev => { const n = {...prev}; delete n[taskId]; return n; });
   }, []);
 
-  const deleteCalTask = useCallback((id) => {
+  const addCalTask = useCallback(async (task) => {
+    await sb.from('calendar_events').insert({
+      id: task.id, name: task.name, date: task.date,
+      time: task.time || '', description: task.desc || '',
+      recur: task.recur, stars: task.stars, done: false
+    });
+    setCalTasks(prev => [...prev, task]);
+  }, []);
+
+  const deleteCalTask = useCallback(async (id) => {
+    await sb.from('calendar_events').delete().eq('id', id);
     setCalTasks(prev => prev.filter(t => t.id !== id));
     setCalDone(prev => { const n={...prev}; delete n[id]; return n; });
   }, []);
+
+  // Loading screen
+  if (loading) return (
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", background:"#FFF0F6", gap:16 }}>
+      <div style={{ fontSize:56, animation:"sparkle 1.2s ease infinite" }}>🌸</div>
+      <div style={{ fontSize:17, fontWeight:700, color:PINK }}>Carregando suas tarefas...</div>
+      <div style={{ fontSize:13, color:"#BBAACC" }}>um segundo, rainha ✨</div>
+      <div style={{ width:32, height:32, borderRadius:"50%", border:`3px solid ${PINK}33`, borderTopColor:PINK, animation:"spin 0.8s linear infinite", marginTop:8 }}/>
+    </div>
+  );
 
   return (
     <div className="app-wrap">
@@ -727,7 +822,7 @@ function App() {
       ) : (
         <CalendarTab
           calTasks={calTasks} calDone={calDone} setCalDone={setCalDone}
-          onAdd={t=>setCalTasks(prev=>[...prev,t])}
+          onAdd={addCalTask}
           onDelete={deleteCalTask}
           onSpawnParticles={spawnParticles}
           onToast={fireToast}
